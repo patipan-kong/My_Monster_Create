@@ -1,0 +1,10 @@
+{
+  "name": "my-monster-creator",
+  "version": "1.0.0",
+  "description": "Kids create monsters from imagination by drawing and/or talking. AI turns it into a collectible monster sticker card.",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  }
+}

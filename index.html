@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>My Monster Creator — Create Your Imaginary Monster</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👾</text></svg>">
+</head>
+<body>
+
+  <!-- ===== Screen 1: Start ===== -->
+  <section id="screen-start" class="screen active">
+    <div class="start-inner">
+      <div class="start-emoji bounce">👾</div>
+      <h1 class="start-title">Create Your<br>Imaginary Monster</h1>
+      <p class="start-sub">Draw it 🎨 or tell us about it 🎤 and AI will bring it to life!</p>
+      <button id="btn-start" class="btn btn-big btn-primary">▶ Start!</button>
+    </div>
+    <div class="floaters" aria-hidden="true">
+      <span>🟣</span><span>⭐</span><span>🟢</span><span>💜</span><span>🟡</span><span>✨</span>
+    </div>
+  </section>
+
+  <!-- ===== Screen 2: Create (draw + speak) ===== -->
+  <section id="screen-create" class="screen">
+    <header class="create-header">
+      <h2>🎨 Draw your monster or 🎤 tell us about it (or both!)</h2>
+    </header>
+
+    <div class="create-body">
+      <div class="canvas-wrap">
+        <canvas id="draw-canvas" width="800" height="600"></canvas>
+        <div class="canvas-hint" id="canvas-hint">✏️ Draw here!</div>
+      </div>
+
+      <div class="toolbar">
+        <div class="colors" id="color-row">
+          <button class="color selected" data-color="#3b2f5e" style="background:#3b2f5e" aria-label="Dark purple"></button>
+          <button class="color" data-color="#ff4757" style="background:#ff4757" aria-label="Red"></button>
+          <button class="color" data-color="#ff9f43" style="background:#ff9f43" aria-label="Orange"></button>
+          <button class="color" data-color="#feca57" style="background:#feca57" aria-label="Yellow"></button>
+          <button class="color" data-color="#2ed573" style="background:#2ed573" aria-label="Green"></button>
+          <button class="color" data-color="#1e90ff" style="background:#1e90ff" aria-label="Blue"></button>
+          <button class="color" data-color="#a55eea" style="background:#a55eea" aria-label="Purple"></button>
+          <button class="color" data-color="#ff6b81" style="background:#ff6b81" aria-label="Pink"></button>
+        </div>
+        <div class="tools">
+          <button id="brush-small" class="tool" aria-label="Small brush">●</button>
+          <button id="brush-big" class="tool selected" aria-label="Big brush">⬤</button>
+          <button id="btn-eraser" class="tool" aria-label="Eraser">🧽</button>
+          <button id="btn-clear" class="tool" aria-label="Clear all">🗑️</button>
+        </div>
+      </div>
+
+      <div class="speech-row">
+        <button id="btn-mic" class="btn btn-mic">🎤 Press and tell us about your monster</button>
+        <div id="transcript-box" class="transcript-box" hidden></div>
+      </div>
+    </div>
+
+    <footer class="create-footer">
+      <button id="btn-done" class="btn btn-big btn-primary">✨ Make My Monster!</button>
+    </footer>
+  </section>
+
+  <!-- ===== Screen 3: Loading ===== -->
+  <section id="screen-loading" class="screen">
+    <div class="loading-inner">
+      <div class="cauldron">🪄</div>
+      <h2 id="loading-text">Summoning your monster...</h2>
+      <div class="loading-dots"><span></span><span></span><span></span></div>
+    </div>
+  </section>
+
+  <!-- ===== Screen 4: Result ===== -->
+  <section id="screen-result" class="screen">
+    <div class="result-inner">
+      <div id="monster-card" class="monster-card">
+        <div class="card-name" id="card-name">Monster</div>
+        <div class="card-image-wrap">
+          <img id="card-image" alt="Your monster">
+        </div>
+        <div class="card-info">
+          <div class="card-ability"><span class="label">⚡ Special Ability</span><span id="card-ability"></span></div>
+          <div class="card-personality"><span class="label">💖 Personality</span><span id="card-personality"></span></div>
+        </div>
+        <div class="card-footer">Created by a Young Monster Designer ⭐</div>
+      </div>
+
+      <div class="result-actions no-print">
+        <button id="btn-save" class="btn btn-action">💾 Save Card</button>
+        <button id="btn-print" class="btn btn-action">🖨️ Print Card</button>
+        <button id="btn-again" class="btn btn-action btn-again">🔁 Make Another</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Error toast ===== -->
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
