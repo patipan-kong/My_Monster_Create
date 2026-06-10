@@ -60,7 +60,11 @@
           <button class="lang-btn" data-lang="ja-JP">🇯🇵 日本語</button>
         </div>
         <button id="btn-mic" class="btn btn-mic">🎤 Speak</button>
-        <div id="transcript-box" class="transcript-box" hidden></div>
+        <div class="transcript-wrap">
+          <textarea id="transcript-box" class="transcript-box" rows="2"
+            placeholder="Your monster's story appears here — you can edit it! ✏️"></textarea>
+          <button id="btn-clear-text" class="transcript-clear" aria-label="Clear text" title="Clear text">🗑️</button>
+        </div>
       </div>
     </div>
 
@@ -85,6 +89,7 @@
         <div class="card-name" id="card-name">Monster</div>
         <div class="card-image-wrap">
           <img id="card-image" alt="Your monster">
+          <button id="btn-flip" class="flip-btn no-print" hidden aria-label="Flip between front and back view" title="Front / Back">🔄</button>
         </div>
         <div class="card-info">
           <div class="card-ability"><span class="label">⚡ Special Ability</span><span id="card-ability"></span></div>

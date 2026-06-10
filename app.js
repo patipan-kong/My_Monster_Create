@@ -142,10 +142,14 @@
   };
   let selectedLang = 'en-US';
 
-  let transcript = '';      // accumulated final transcript across recordings
+  // The textarea is the single source of truth for the transcript —
+  // kids/parents/staff can edit, delete, or clear it before anything is sent to AI.
+  let baseTranscript = '';  // textarea content when the current recording started
   let sessionFinal = '';    // final text from the current recording
   let listening = false;
   let recognition = null;
+
+  const joinText = (...parts) => parts.map((s) => s.trim()).filter(Boolean).join(' ');
 
   function micIdleLabel() { return `🎤 ${LANGS[selectedLang].speak}`; }
   function micListeningLabel() { return `🔴 ${LANGS[selectedLang].listening}`; }
@@ -165,8 +169,7 @@
         if (res.isFinal) sessionFinal += res[0].transcript + ' ';
         else interim += res[0].transcript;
       }
-      transcriptBox.hidden = false;
-      transcriptBox.textContent = (transcript + ' ' + sessionFinal + interim).trim() || '...';
+      transcriptBox.value = joinText(baseTranscript, sessionFinal, interim);
     };
 
     recognition.onerror = (event) => {
@@ -180,9 +183,10 @@
     // continuous = false: recognition ends by itself after one utterance
     recognition.onend = () => {
       if (sessionFinal.trim()) {
-        transcript = (transcript + ' ' + sessionFinal).trim();
-      } else if (listening) {
-        showToast(LANGS[selectedLang].retry);
+        transcriptBox.value = joinText(baseTranscript, sessionFinal);
+      } else {
+        transcriptBox.value = baseTranscript;
+        if (listening) showToast(LANGS[selectedLang].retry);
       }
       finishListeningUI();
     };
@@ -194,10 +198,10 @@
   function startListening() {
     listening = true;
     sessionFinal = '';
+    baseTranscript = transcriptBox.value.trim(); // new speech appends to existing text
     btnMic.classList.add('recording');
     btnMic.textContent = micListeningLabel();
-    transcriptBox.hidden = false;
-    transcriptBox.textContent = transcript || '...';
+    transcriptBox.readOnly = true; // lock while live results stream in
     recognition.lang = selectedLang;
     try { recognition.start(); } catch (_) { /* already started */ }
   }
@@ -211,14 +215,21 @@
     listening = false;
     btnMic.classList.remove('recording');
     btnMic.textContent = micIdleLabel();
-    transcriptBox.textContent = transcript;
-    if (!transcript) transcriptBox.hidden = true;
+    transcriptBox.readOnly = false;
   }
 
   btnMic.addEventListener('click', () => {
     if (!recognition) return;
     if (listening) stopListening();
     else startListening();
+  });
+
+  // Clear the whole transcript with one tap
+  document.getElementById('btn-clear-text').addEventListener('click', () => {
+    if (listening) stopListening();
+    transcriptBox.value = '';
+    baseTranscript = '';
+    sessionFinal = '';
   });
 
   // Language selector — one tap to switch; stop any active recording first
@@ -301,7 +312,74 @@
     }
 
     cx.putImageData(imageData, 0, 0);
-    return c.toDataURL('image/png');
+    return c;
+  }
+
+  // ---------- Turnaround sheet splitting (front view left, back view right) ----------
+  function cropToContent(src, x0, x1) {
+    const cx = src.getContext('2d');
+    const { height: h } = src;
+    const region = cx.getImageData(x0, 0, x1 - x0, h);
+    const d = region.data;
+    const rw = x1 - x0;
+    let minX = rw, maxX = -1, minY = h, maxY = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < rw; x++) {
+        if (d[(y * rw + x) * 4 + 3] > 10) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    if (maxX < 0) return null; // nothing in this half
+    const pad = 14;
+    const out = document.createElement('canvas');
+    out.width = (maxX - minX + 1) + pad * 2;
+    out.height = (maxY - minY + 1) + pad * 2;
+    out.getContext('2d').drawImage(
+      src,
+      x0 + minX, minY, maxX - minX + 1, maxY - minY + 1,
+      pad, pad, maxX - minX + 1, maxY - minY + 1
+    );
+    return out.toDataURL('image/png');
+  }
+
+  // Find the widest fully-transparent column gap near the middle and split there.
+  // Returns [frontDataUrl, backDataUrl] or null if the sheet can't be split.
+  function splitTurnaround(c) {
+    const cx = c.getContext('2d');
+    const { width: w, height: h } = c;
+    const d = cx.getImageData(0, 0, w, h).data;
+
+    const colHasInk = new Uint8Array(w);
+    for (let x = 0; x < w; x++) {
+      for (let y = 0; y < h; y++) {
+        if (d[(y * w + x) * 4 + 3] > 10) { colHasInk[x] = 1; break; }
+      }
+    }
+
+    let best = null;
+    let runStart = -1;
+    for (let x = 0; x <= w; x++) {
+      const empty = x < w && !colHasInk[x];
+      if (empty && runStart < 0) runStart = x;
+      if (!empty && runStart >= 0) {
+        const mid = (runStart + x) / 2;
+        const len = x - runStart;
+        if (mid > w * 0.25 && mid < w * 0.75 && (!best || len > best.len)) {
+          best = { mid, len };
+        }
+        runStart = -1;
+      }
+    }
+
+    if (!best || best.len < w * 0.02) return null;
+    const split = Math.round(best.mid);
+    const front = cropToContent(c, 0, split);
+    const back = cropToContent(c, split, w);
+    return front && back ? [front, back] : null;
   }
 
   function loadImage(src) {
@@ -315,7 +393,9 @@
 
   // ---------- Main flow ----------
   let monster = null; // { name, specialAbility, personality, ... }
-  let stickerDataUrl = null;
+  let stickerDataUrl = null;     // front view
+  let backStickerDataUrl = null; // back view (null if the sheet couldn't be split)
+  let showingBack = false;
 
   document.getElementById('btn-start').addEventListener('click', () => showScreen('create'));
 
@@ -323,6 +403,8 @@
     if (listening) stopListening();
 
     const imageBase64 = exportDrawing();
+    // Always read from the textarea — the reviewed/edited text is what gets sent
+    const transcript = transcriptBox.value.trim();
     if (!imageBase64 && !transcript) {
       showToast('Draw 🎨 or tell us 🎤 at least one thing first!');
       return;
@@ -342,13 +424,23 @@
       // 2) Image generation
       const gen = await postJSON('/api/generate', { prompt: monster.prompt });
 
-      // 3) Make the white background transparent -> sticker
+      // 3) Make the white background transparent, then split the
+      //    turnaround sheet into front (left) and back (right) stickers
       const rawImg = await loadImage(`data:${gen.mimeType};base64,${gen.imageBase64}`);
-      stickerDataUrl = removeWhiteBackground(rawImg);
+      const sheet = removeWhiteBackground(rawImg);
+      const views = splitTurnaround(sheet);
+      if (views) {
+        [stickerDataUrl, backStickerDataUrl] = views;
+      } else {
+        stickerDataUrl = sheet.toDataURL('image/png');
+        backStickerDataUrl = null;
+      }
+      showingBack = false;
 
       // 4) Fill the card
       document.getElementById('card-name').textContent = monster.name || 'Mystery Monster';
       document.getElementById('card-image').src = stickerDataUrl;
+      document.getElementById('btn-flip').hidden = !backStickerDataUrl;
       document.getElementById('card-ability').textContent = monster.specialAbility || '-';
       document.getElementById('card-personality').textContent = monster.personality || '-';
 
@@ -455,13 +547,22 @@
 
   document.getElementById('btn-print').addEventListener('click', () => window.print());
 
+  // Flip the card image between front and back views
+  document.getElementById('btn-flip').addEventListener('click', () => {
+    if (!backStickerDataUrl) return;
+    showingBack = !showingBack;
+    document.getElementById('card-image').src = showingBack ? backStickerDataUrl : stickerDataUrl;
+  });
+
   document.getElementById('btn-again').addEventListener('click', () => {
     clearCanvas();
-    transcript = '';
-    transcriptBox.hidden = true;
-    transcriptBox.textContent = '';
+    transcriptBox.value = '';
+    baseTranscript = '';
+    sessionFinal = '';
     monster = null;
     stickerDataUrl = null;
+    backStickerDataUrl = null;
+    showingBack = false;
     showScreen('create');
   });
 })();
