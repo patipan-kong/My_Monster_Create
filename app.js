@@ -131,45 +131,60 @@
     return out.toDataURL('image/png').split(',')[1];
   }
 
-  // ---------- Speech recognition ----------
+  // ---------- Speech recognition (Thai / English / Japanese) ----------
   const btnMic = document.getElementById('btn-mic');
   const transcriptBox = document.getElementById('transcript-box');
-  let transcript = '';
+
+  const LANGS = {
+    'th-TH': { speak: 'พูด', listening: 'กำลังฟัง...', retry: 'ฟังไม่ชัด ลองพูดอีกครั้งนะ' },
+    'en-US': { speak: 'Speak', listening: 'Listening...', retry: "I couldn't hear clearly. Please try again." },
+    'ja-JP': { speak: 'はなす', listening: '聞いています...', retry: 'うまく聞き取れませんでした。もう一度お願いします。' }
+  };
+  let selectedLang = 'en-US';
+
+  let transcript = '';      // accumulated final transcript across recordings
+  let sessionFinal = '';    // final text from the current recording
   let listening = false;
   let recognition = null;
+
+  function micIdleLabel() { return `🎤 ${LANGS[selectedLang].speak}`; }
+  function micListeningLabel() { return `🔴 ${LANGS[selectedLang].listening}`; }
 
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) {
     recognition = new SR();
-    recognition.lang = 'en-US';
-    recognition.continuous = true;
+    recognition.continuous = false;
     recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
 
     recognition.onresult = (event) => {
-      let finalText = '';
+      sessionFinal = '';
       let interim = '';
       for (let i = 0; i < event.results.length; i++) {
         const res = event.results[i];
-        if (res.isFinal) finalText += res[0].transcript + ' ';
+        if (res.isFinal) sessionFinal += res[0].transcript + ' ';
         else interim += res[0].transcript;
       }
-      transcript = finalText.trim();
       transcriptBox.hidden = false;
-      transcriptBox.textContent = (transcript + ' ' + interim).trim() || '...';
+      transcriptBox.textContent = (transcript + ' ' + sessionFinal + interim).trim() || '...';
     };
 
     recognition.onerror = (event) => {
       if (event.error === 'not-allowed') {
         showToast('🎤 Please allow microphone access');
+      } else if (event.error !== 'aborted') {
+        showToast(LANGS[selectedLang].retry);
       }
-      stopListening();
     };
 
+    // continuous = false: recognition ends by itself after one utterance
     recognition.onend = () => {
-      if (listening) {
-        // Chrome stops on silence — restart while the kid is still in record mode
-        try { recognition.start(); } catch (_) { /* already started */ }
+      if (sessionFinal.trim()) {
+        transcript = (transcript + ' ' + sessionFinal).trim();
+      } else if (listening) {
+        showToast(LANGS[selectedLang].retry);
       }
+      finishListeningUI();
     };
   } else {
     btnMic.disabled = true;
@@ -178,18 +193,25 @@
 
   function startListening() {
     listening = true;
+    sessionFinal = '';
     btnMic.classList.add('recording');
-    btnMic.textContent = '🔴 Listening... press again when done';
+    btnMic.textContent = micListeningLabel();
     transcriptBox.hidden = false;
-    transcriptBox.textContent = '...';
+    transcriptBox.textContent = transcript || '...';
+    recognition.lang = selectedLang;
     try { recognition.start(); } catch (_) { /* already started */ }
   }
 
   function stopListening() {
+    if (recognition) try { recognition.stop(); } catch (_) {}
+    finishListeningUI();
+  }
+
+  function finishListeningUI() {
     listening = false;
     btnMic.classList.remove('recording');
-    btnMic.textContent = '🎤 Press and tell us about your monster';
-    if (recognition) try { recognition.stop(); } catch (_) {}
+    btnMic.textContent = micIdleLabel();
+    transcriptBox.textContent = transcript;
     if (!transcript) transcriptBox.hidden = true;
   }
 
@@ -197,6 +219,17 @@
     if (!recognition) return;
     if (listening) stopListening();
     else startListening();
+  });
+
+  // Language selector — one tap to switch; stop any active recording first
+  document.querySelectorAll('.lang-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      if (listening) stopListening();
+      selectedLang = btn.dataset.lang;
+      document.querySelectorAll('.lang-btn').forEach((b) => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      if (recognition) btnMic.textContent = micIdleLabel();
+    });
   });
 
   // ---------- Loading messages ----------
@@ -300,7 +333,11 @@
 
     try {
       // 1) Flash Lite: extract monster attributes
-      monster = await postJSON('/api/analyze', { imageBase64, transcript });
+      monster = await postJSON('/api/analyze', {
+        imageBase64,
+        transcript,
+        language: transcript ? selectedLang : null
+      });
 
       // 2) Image generation
       const gen = await postJSON('/api/generate', { prompt: monster.prompt });

@@ -1,5 +1,6 @@
 // POST /api/analyze
-// Body: { imageBase64?: string (PNG, no data: prefix), transcript?: string }
+// Body: { imageBase64?: string (PNG, no data: prefix), transcript?: string, language?: string }
+// language is the BCP-47 tag the child spoke in (th-TH / en-US / ja-JP).
 // Uses Gemini 2.5 Flash Lite to extract monster attributes -> structured JSON.
 
 const MODEL = 'gemini-2.5-flash-lite';
@@ -8,7 +9,7 @@ const SYSTEM_PROMPT = `You are helping children (ages 5-12) turn their imaginati
 
 Input may include:
 - A child's drawing (rough sketch on a canvas).
-- A speech transcript (possibly messy or fragmented).
+- A speech transcript in Thai, English, or Japanese (possibly messy or fragmented).
 - Both.
 
 Your tasks:
@@ -52,7 +53,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'GEMINI_API_KEY is not configured' });
   }
 
-  const { imageBase64, transcript } = req.body || {};
+  const { imageBase64, transcript, language } = req.body || {};
   if (!imageBase64 && !transcript) {
     return res.status(400).json({ error: 'Provide a drawing, a transcript, or both' });
   }
@@ -63,7 +64,8 @@ export default async function handler(req, res) {
     parts.push({ text: 'Above is the child\'s drawing of their monster.' });
   }
   if (transcript) {
-    parts.push({ text: `The child said about their monster: "${transcript}"` });
+    const spokenIn = language ? ` (spoken in ${language})` : '';
+    parts.push({ text: `The child said about their monster${spokenIn}: "${transcript}"` });
   }
   parts.push({ text: 'Create the monster JSON now.' });
 
